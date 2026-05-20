@@ -1,0 +1,3 @@
+[config]
+model = "anthropic/claude-sonnet-4-6"
+fallback_models = ["anthropic/claude-sonnet-4-6"]
