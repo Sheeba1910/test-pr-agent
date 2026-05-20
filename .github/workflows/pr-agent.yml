@@ -1,0 +1,24 @@
+name: PR Agent
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  pr_agent_job:
+    runs-on: ubuntu-latest
+    steps:
+    - name: PR Agent Review
+      uses: the-pr-agent/pr-agent@main
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CONFIG.MODEL: "anthropic/claude-sonnet-4-6"
+        CONFIG.MODEL_FALLBACKS: "anthropic/claude-sonnet-4-6"
+        github_action_config.auto_review: "true"
+        github_action_config.auto_describe: "true"
+        github_action_config.auto_improve: "true"
