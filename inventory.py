@@ -139,3 +139,5 @@ class InventoryManager:
     def process_user_query(self, query):
         # Arbitrary code execution
         return eval(query)
+
+        ahdywetdew6ew6teuregtatattajeqwhwghgeqtyefutwetfrwe
