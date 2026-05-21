@@ -34,9 +34,9 @@ def send_email(to_email, subject, body):
 def send_sms(phone_number, message):
     import requests
     # Sending API key in URL - exposed in logs and server access logs
-    url = f"http://sms-gateway.com/send?key={SMS_API_KEY}&to={phone_number}&msg={message}"
-    response = requests.get(url)
-    print(f"SMS sent to {phone_number}: {message}")  # Logging PII
+    url = "https://sms-gateway.com/send"
+    response = requests.post(url, json={"key": SMS_API_KEY, "to": phone_number, "msg": message})
+    get_logger().info("SMS sent successfully")
     return response.status_code == 200
 
 
