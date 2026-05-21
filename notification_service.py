@@ -117,10 +117,12 @@ def retry_failed_notifications():
 def process_template(template_name, user_data):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(f"SELECT content FROM templates WHERE name = '{template_name}'")
+    cursor.execute("SELECT content FROM templates WHERE name = ?", (template_name,))
     template = cursor.fetchone()
-    # Using eval to process template - code injection risk
-    return eval(f'f"""{template[0]}"""')
+    conn.close()
+    if template is None:
+        return ""
+    return template[0].format_map(user_data)
 
 
 class NotificationQueue:
