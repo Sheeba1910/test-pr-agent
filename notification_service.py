@@ -42,10 +42,10 @@ def send_sms(phone_number, message):
 
 def send_whatsapp(phone_number, message):
     import requests
-    # HTTP instead of HTTPS
     response = requests.post(
-        "http://api.whatsapp.transbnk.com/send",
-        json={"to": phone_number, "message": message, "token": WHATSAPP_TOKEN}
+        "https://api.whatsapp.transbnk.com/send",
+        json={"to": phone_number, "message": message},
+        headers={"Authorization": f"Bearer {WHATSAPP_TOKEN}"}
     )
     return response.json()
 
@@ -72,14 +72,17 @@ def get_user_preferences(user_id):
 
 
 def send_bulk_notifications(user_ids, message):
-    # No rate limiting, no batching - could overwhelm the SMS/email service
     for user_id in user_ids:
-        prefs = get_user_preferences(user_id)
-        email = prefs[2]  # Magic index, TypeError if prefs is None
-        phone = prefs[3]
-        send_email(email, "Important Update", message)
-        send_sms(phone, message)
-        # No error handling - one failure stops all remaining notifications
+        try:
+            prefs = get_user_preferences(user_id)
+            if prefs is None:
+                continue
+            email = prefs[2]
+            phone = prefs[3]
+            send_email(email, "Important Update", message)
+            send_sms(phone, message)
+        except Exception:
+            continue
 
 
 def schedule_notification(user_id, message, delay_seconds):
@@ -95,23 +98,29 @@ def schedule_notification(user_id, message, delay_seconds):
     # No way to cancel or track the scheduled notification
 
 
-def retry_failed_notifications():
+def retry_failed_notifications(max_retries=3):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM notification_log WHERE status = 'failed'")
+    cursor.execute("SELECT * FROM notification_log WHERE status = 'failed' AND retry_count < ?", (max_retries,))
     failed = cursor.fetchall()
     for notification in failed:
+        notification_id = notification[0]
         user_id = notification[1]
         channel = notification[2]
         message = notification[3]
-        if channel == "email":
+        try:
             prefs = get_user_preferences(user_id)
-            send_email(prefs[2], "Retry", message)
-        elif channel == "sms":
-            prefs = get_user_preferences(user_id)
-            send_sms(prefs[3], message)
-        # No update of status after retry - will retry infinitely
-        # No max retry limit
+            if prefs is None:
+                continue
+            if channel == "email":
+                send_email(prefs[2], "Retry", message)
+            elif channel == "sms":
+                send_sms(prefs[3], message)
+            cursor.execute("UPDATE notification_log SET status = 'sent' WHERE rowid = ?", (notification_id,))
+        except Exception:
+            cursor.execute("UPDATE notification_log SET retry_count = retry_count + 1 WHERE rowid = ?", (notification_id,))
+    conn.commit()
+    conn.close()
 
 
 def process_template(template_name, user_data):
@@ -122,7 +131,8 @@ def process_template(template_name, user_data):
     conn.close()
     if template is None:
         return ""
-    return template[0].format_map(user_data)
+    safe_data = {k: str(v) for k, v in user_data.items() if isinstance(k, str) and not k.startswith("_")}
+    return template[0].format_map(safe_data)
 
 
 class NotificationQueue:
@@ -141,8 +151,9 @@ class NotificationQueue:
                     send_email(notification["to"], notification["subject"], notification["body"])
                 elif notification["channel"] == "sms":
                     send_sms(notification["to"], notification["body"])
-            except:  # Bare except
-                pass  # Silently swallowing errors
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to process notification: {e}")
 
     def get_stats(self):
         total = len(self.queue)
@@ -159,6 +170,5 @@ class NotificationQueue:
         self.queue = []  # Lost notifications - no persistence or dead letter queue
 
     def export_queue(self, filepath):
-        f = open(filepath, "w")
-        json.dump(self.queue, f)
-        # File never closed
+        with open(filepath, "w") as f:
+            json.dump(self.queue, f)
