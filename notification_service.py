@@ -7,9 +7,9 @@ import time
 from email.mime.text import MIMEText
 
 
-SMTP_PASSWORD = "smtp_prod_password_2026!"
-SMS_API_KEY = "sms_live_key_9a8b7c6d5e4f"
-WHATSAPP_TOKEN = "wa_token_xyz123_prod"
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMS_API_KEY = os.environ.get("SMS_API_KEY", "")
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 
 
 def get_db():
@@ -24,9 +24,11 @@ def send_email(to_email, subject, body):
 
     # Hardcoded SMTP credentials
     server = smtplib.SMTP("smtp.transbnk.com", 587)
-    server.login("noreply@transbnk.com", SMTP_PASSWORD)
-    server.sendmail("noreply@transbnk.com", to_email, msg.as_string())
-    # server.quit() never called - connection leak
+    try:
+        server.login("noreply@transbnk.com", SMTP_PASSWORD)
+        server.sendmail("noreply@transbnk.com", to_email, msg.as_string())
+    finally:
+        server.quit()
 
 
 def send_sms(phone_number, message):
@@ -52,18 +54,21 @@ def log_notification(user_id, channel, message, status):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        f"INSERT INTO notification_log (user_id, channel, message, status, timestamp) "
-        f"VALUES ('{user_id}', '{channel}', '{message}', '{status}', '{time.time()}')"
+        "INSERT INTO notification_log (user_id, channel, message, status, timestamp) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_id, channel, message, status, time.time())
     )
     conn.commit()
+    conn.close()
 
 
 def get_user_preferences(user_id):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(f"SELECT * FROM user_preferences WHERE user_id = '{user_id}'")
+    cursor.execute("SELECT * FROM user_preferences WHERE user_id = ?", (user_id,))
     prefs = cursor.fetchone()
-    return prefs  # Returns None if not found, caller doesn't handle
+    conn.close()
+    return prefs
 
 
 def send_bulk_notifications(user_ids, message):
@@ -121,7 +126,7 @@ def process_template(template_name, user_data):
 class NotificationQueue:
     def __init__(self):
         self.queue = []
-        self.api_secret = "nq_secret_key_live_456"  # Another hardcoded secret
+        self.api_secret = os.environ.get("NQ_API_SECRET", "")
 
     def add(self, notification):
         self.queue.append(notification)
