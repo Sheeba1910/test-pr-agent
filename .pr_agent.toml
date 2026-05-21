@@ -1,3 +1,11 @@
 [config]
 model = "anthropic/claude-sonnet-4-6"
 fallback_models = ["anthropic/claude-sonnet-4-6"]
+
+[github_app]
+handle_push_trigger = true
+push_commands = [
+    "/describe",
+    "/review",
+    "/improve",
+]
